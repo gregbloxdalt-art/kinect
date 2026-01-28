@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kinect 360 WebUSB Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .bg-offline { background-color: #ef4444; }
+        .bg-online { background-color: #22c55e; }
+        canvas { background: #111; border-radius: 8px; width: 100%; max-width: 640px; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-8 border-b border-slate-700 pb-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight">Kinect 360 <span class="text-blue-400">WebUSB</span></h1>
+                <p class="text-slate-400 mt-1">Direct hardware access via browser</p>
+            </div>
+            <div id="connectionStatus" class="flex items-center bg-slate-800 px-4 py-2 rounded-full border border-slate-600">
+                <span class="status-dot bg-offline"></span>
+                <span id="statusLabel" class="text-sm font-medium">Disconnected</span>
+            </div>
+        </header>
+
+        <main class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Controls Column -->
+            <div class="md:col-span-1 space-y-6">
+                <div class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                        Device Control
+                    </h2>
+                    
+                    <button id="connectBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl transition-all active:scale-95 mb-4 shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Connect Kinect
+                    </button>
+
+                    <div class="space-y-4 pt-4 border-t border-slate-700">
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-2">LED Pattern</label>
+                            <select id="ledSelect" disabled class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm">
+                                <option value="0">Off</option>
+                                <option value="1">Green</option>
+                                <option value="2">Red</option>
+                                <option value="3">Yellow</option>
+                                <option value="4">Blink Green</option>
+                                <option value="5">Blink Red/Yellow</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm text-slate-400 mb-2">Tilt Angle (<span id="angleVal">0</span>°)</label>
+                            <input type="range" id="tiltRange" disabled min="-31" max="31" value="0" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="deviceLogs" class="bg-black/50 p-4 rounded-xl border border-slate-800 h-48 overflow-y-auto font-mono text-xs text-green-400">
+                    <div>> Initializing...</div>
+                </div>
+            </div>
+
+            <!-- Visualizer Column -->
+            <div class="md:col-span-2">
+                <div class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold">Live Stream Preview</h2>
+                        <div class="text-xs text-slate-400 uppercase tracking-widest">Raw WebUSB Data</div>
+                    </div>
+                    
+                    <div class="relative group">
+                        <canvas id="videoCanvas" width="640" height="480"></canvas>
+                        <div id="placeholderOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 rounded-lg">
+                            <svg class="w-16 h-16 text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                            <span id="placeholderText" class="text-slate-400 font-medium text-sm text-center px-4">Camera stream inactive</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-2 gap-4">
+                        <div class="bg-slate-900 p-3 rounded-lg border border-slate-700">
+                            <div class="text-[10px] text-slate-500 uppercase">Vendor ID</div>
+                            <div class="font-mono text-sm">0x045E (Microsoft)</div>
+                        </div>
+                        <div class="bg-slate-900 p-3 rounded-lg border border-slate-700">
+                            <div class="text-[10px] text-slate-500 uppercase">Device ID</div>
+                            <div id="productId" class="font-mono text-sm">---</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Kinect USB Constants
+        const VENDOR_ID = 0x045E;
+        const PID_MOTOR = 0x02B0;
+        const PID_CAMERA = 0x02AE;
+        const PID_AUDIO = 0x02AD;
+
+        // UI Elements
+        const connectBtn = document.getElementById('connectBtn');
+        const logs = document.getElementById('deviceLogs');
+        const statusDot = document.querySelector('.status-dot');
+        const statusLabel = document.getElementById('statusLabel');
+        const ledSelect = document.getElementById('ledSelect');
+        const tiltRange = document.getElementById('tiltRange');
+        const angleVal = document.getElementById('angleVal');
+        const placeholder = document.getElementById('placeholderOverlay');
+        const placeholderText = document.getElementById('placeholderText');
+        const productIdDisplay = document.getElementById('productId');
+
+        let motorDevice = null;
+        let cameraDevice = null;
+
+        function log(msg) {
+            const entry = document.createElement('div');
+            entry.textContent = `> ${msg}`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        async function connect() {
+            if (!navigator.usb) {
+                log("Error: navigator.usb is undefined. Ensure you are using HTTPS and a compatible browser.");
+                return;
+            }
+
+            try {
+                log("Requesting USB devices...");
+                
+                const device = await navigator.usb.requestDevice({
+                    filters: [
+                        { vendorId: VENDOR_ID, productId: PID_MOTOR },
+                        { vendorId: VENDOR_ID, productId: PID_CAMERA }
+                    ]
+                });
+
+                log(`Selected: ${device.productName || 'Kinect Device'}`);
+                productIdDisplay.textContent = `0x${device.productId.toString(16).toUpperCase()}`;
+
+                if (device.productId === PID_MOTOR) {
+                    motorDevice = device;
+                    await setupMotor();
+                } else if (device.productId === PID_CAMERA) {
+                    cameraDevice = device;
+                    await setupCamera();
+                }
+
+                updateUI(true);
+            } catch (err) {
+                log(`Connection Error: ${err.message}`);
+                console.error(err);
+            }
+        }
+
+        async function setupMotor() {
+            try {
+                await motorDevice.open();
+                await motorDevice.selectConfiguration(1);
+                await motorDevice.claimInterface(0);
+                log("Motor interface claimed.");
+                
+                ledSelect.disabled = false;
+                tiltRange.disabled = false;
+            } catch (e) {
+                log(`Motor setup failed: ${e.message}`);
+            }
+        }
+
+        async function setupCamera() {
+            try {
+                await cameraDevice.open();
+                await cameraDevice.selectConfiguration(1);
+                await cameraDevice.claimInterface(0);
+                log("Camera interface claimed.");
+                placeholder.classList.add('hidden');
+                log("Attempting stream initialization sequence...");
+            } catch (e) {
+                log(`Camera setup failed: ${e.message}`);
+            }
+        }
+
+        async function setLED(value) {
+            if (!motorDevice || !motorDevice.opened) return;
+            try {
+                await motorDevice.controlTransferOut({
+                    requestType: 'vendor',
+                    recipient: 'device',
+                    request: 0x06,
+                    value: value,
+                    index: 0
+                });
+                log(`LED set to ${value}`);
+            } catch (e) {
+                log(`LED Error: ${e.message}`);
+            }
+        }
+
+        async function setTilt(angle) {
+            if (!motorDevice || !motorDevice.opened) return;
+            const kinectAngle = angle * 2;
+            try {
+                await motorDevice.controlTransferOut({
+                    requestType: 'vendor',
+                    recipient: 'device',
+                    request: 0x31,
+                    value: kinectAngle & 0xFFFF,
+                    index: 0
+                });
+                angleVal.textContent = angle;
+                log(`Tilt set to ${angle}°`);
+            } catch (e) {
+                log(`Tilt Error: ${e.message}`);
+            }
+        }
+
+        function updateUI(connected) {
+            if (connected) {
+                statusDot.classList.replace('bg-offline', 'bg-online');
+                statusLabel.textContent = 'Connected';
+                connectBtn.textContent = 'Device Active';
+                connectBtn.classList.replace('bg-blue-600', 'bg-green-600');
+            } else {
+                statusDot.classList.replace('bg-online', 'bg-offline');
+                statusLabel.textContent = 'Disconnected';
+                connectBtn.textContent = 'Connect Kinect';
+                connectBtn.classList.replace('bg-green-600', 'bg-blue-600');
+            }
+        }
+
+        // Initialize App
+        function init() {
+            if (navigator.usb) {
+                log("WebUSB detected.");
+                connectBtn.addEventListener('click', connect);
+                
+                navigator.usb.addEventListener('disconnect', (event) => {
+                    if (event.device === motorDevice || event.device === cameraDevice) {
+                        log("Device disconnected.");
+                        motorDevice = null;
+                        cameraDevice = null;
+                        updateUI(false);
+                        ledSelect.disabled = true;
+                        tiltRange.disabled = true;
+                        placeholder.classList.remove('hidden');
+                    }
+                });
+            } else {
+                const errorMsg = "WebUSB is not available in this environment. Note: WebUSB requires HTTPS and is not supported in some sandboxed frames.";
+                log(errorMsg);
+                statusLabel.textContent = "Unsupported";
+                connectBtn.disabled = true;
+                placeholderText.textContent = errorMsg;
+                placeholderText.classList.add('text-red-400');
+            }
+        }
+
+        ledSelect.addEventListener('change', (e) => setLED(parseInt(e.target.value)));
+        tiltRange.addEventListener('change', (e) => setTilt(parseInt(e.target.value)));
+
+        // Run init
+        init();
+    </script>
+</body>
+</html>
