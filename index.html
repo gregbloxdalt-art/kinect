@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kinect 360 WebUSB</title>
+    <title>Kinect 360 WebUSB Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
@@ -66,7 +66,7 @@
                     </div>
                 </div>
 
-                <div id="deviceLogs" class="bg-black/50 p-4 rounded-xl border border-slate-800 h-48 overflow-y-auto font-mono text-[10px] text-green-400/80 leading-relaxed">
+                <div id="deviceLogs" class="bg-black/50 p-4 rounded-xl border border-slate-800 h-64 overflow-y-auto font-mono text-[10px] text-green-400/80 leading-relaxed">
                     <div class="text-slate-500">// Terminal Log</div>
                 </div>
             </div>
@@ -94,7 +94,7 @@
                     <div class="mt-4 flex flex-wrap gap-4 items-center justify-between">
                         <div class="flex gap-4">
                              <div class="bg-slate-900 px-3 py-1 rounded text-[10px] border border-slate-700">
-                                <span class="text-slate-500">PID:</span> <span id="pidVal">---</span>
+                                <span class="text-slate-500">DATA:</span> <span id="dataStats" class="text-blue-400">0 bytes</span>
                              </div>
                              <div class="bg-slate-900 px-3 py-1 rounded text-[10px] border border-slate-700">
                                 <span class="text-slate-500">STREAM:</span> <span id="streamStatus" class="text-red-400">OFFLINE</span>
@@ -117,6 +117,8 @@
         let motorDevice = null;
         let cameraDevice = null;
         let activeMode = 'video';
+        let isStreaming = false;
+        let totalBytesReceived = 0;
 
         // UI Refs
         const logs = document.getElementById('deviceLogs');
@@ -128,7 +130,9 @@
         const initCameraBtn = document.getElementById('initCameraBtn');
         const placeholder = document.getElementById('placeholderOverlay');
         const streamStatus = document.getElementById('streamStatus');
-        const pidVal = document.getElementById('pidVal');
+        const dataStats = document.getElementById('dataStats');
+        const canvas = document.getElementById('videoCanvas');
+        const ctx = canvas.getContext('2d');
 
         function log(msg, color = '') {
             const div = document.createElement('div');
@@ -176,7 +180,6 @@
                 log("Camera interface claimed.", '#34d399');
                 cameraDevice.opened = true;
                 initCameraBtn.disabled = false;
-                pidVal.textContent = "0x02AE";
             } catch (e) {
                 log("Camera setup failed: " + e.message, '#f87171');
             }
@@ -184,26 +187,76 @@
 
         async function initStream() {
             if (!cameraDevice || !cameraDevice.opened) return;
-            log("Sending firmware initialization sequence...");
             
             try {
-                // The "Magic" sequence to wake up Kinect V1 Camera
-                // Command: Write 0x01 to 0x05 (Start Stream)
+                isStreaming = true;
+                log("Initializing camera firmware...", '#fbbf24');
+                
+                // 1. Set the video mode (0x05 for Depth, 0x04 for Video)
+                let modeVal = activeMode === 'video' ? 0x04 : 0x05;
+                if (activeMode === 'ir') modeVal = 0x01;
+
                 await cameraDevice.controlTransferOut({
                     requestType: 'vendor', recipient: 'device',
-                    request: 0x06, value: 4, index: 0 // Set video mode
+                    request: 0x06, value: modeVal, index: 0
+                });
+
+                // 2. Start streaming
+                await cameraDevice.controlTransferOut({
+                    requestType: 'vendor', recipient: 'device',
+                    request: 0x05, value: 1, index: 0
                 });
                 
-                // Note: For actual pixel streaming, we'd need to listen to Bulk In transfers
-                // on endpoint 0x81 (Video) or 0x82 (Depth).
-                
-                log("Stream started! (Endpoint 0x81 listening)", '#fbbf24');
+                log("Streaming started. Polling endpoints...", '#34d399');
                 placeholder.classList.add('hidden');
                 streamStatus.textContent = "ACTIVE";
                 streamStatus.classList.replace('text-red-400', 'text-green-400');
+                
+                readLoop();
             } catch (e) {
-                log("Init sequence failed: " + e.message, '#f87171');
+                log("Stream Init failed: " + e.message, '#f87171');
+                isStreaming = false;
             }
+        }
+
+        async function readLoop() {
+            // Endpoint 0x81 is Video/IR, 0x82 is Depth
+            const endpoint = activeMode === 'depth' ? 2 : 1; 
+            
+            while (isStreaming && cameraDevice && cameraDevice.opened) {
+                try {
+                    // We request a large chunk of data (Kinect packets are usually small, but we pool them)
+                    const result = await cameraDevice.transferIn(endpoint, 16384);
+                    
+                    if (result.data && result.data.byteLength > 0) {
+                        totalBytesReceived += result.data.byteLength;
+                        dataStats.textContent = `${(totalBytesReceived / 1024).toFixed(1)} KB`;
+                        
+                        renderRawData(result.data);
+                    }
+                } catch (e) {
+                    if (e.name === 'NetworkError') break; // Device unplugged or closed
+                    console.error("Poll error:", e);
+                }
+            }
+        }
+
+        // Basic Visualizer: Draws raw bytes to show the hardware is actually alive
+        function renderRawData(dataView) {
+            const buf = new Uint8Array(dataView.buffer);
+            const imageData = ctx.createImageData(canvas.width, canvas.height);
+            
+            // This is a dummy renderer. Real Kinect data requires 
+            // depacketization (finding 0xFF 0xFF headers) and Bayer decoding.
+            // For now, we just map bytes to the screen so you see static/movement.
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                const val = buf[i % buf.length];
+                imageData.data[i] = val;     // R
+                imageData.data[i + 1] = val; // G
+                imageData.data[i + 2] = val; // B
+                imageData.data[i + 3] = 255; // A
+            }
+            ctx.putImageData(imageData, 0, 0);
         }
 
         async function setTilt(angle) {
@@ -216,54 +269,40 @@
             angleVal.textContent = `${angle}°`;
         }
 
-        async function setLED(val) {
-            if (!motorDevice) return;
-            await motorDevice.controlTransferOut({
-                requestType: 'vendor', recipient: 'device',
-                request: 0x06, value: val, index: 0
-            });
-        }
-
         function switchMode(mode) {
             activeMode = mode;
             document.querySelectorAll('button[id^="mode-"]').forEach(btn => {
-                btn.classList.remove('tab-active');
-                btn.classList.add('text-slate-500');
+                btn.classList.toggle('tab-active', btn.id === `mode-${mode}`);
+                btn.classList.toggle('text-slate-500', btn.id !== `mode-${mode}`);
             });
-            const activeBtn = document.getElementById(`mode-${mode}`);
-            activeBtn.classList.add('tab-active');
-            activeBtn.classList.remove('text-slate-500');
-            log(`Switched to ${mode.toUpperCase()} mode.`);
-            
-            if (cameraDevice) initStream(); // Re-init stream for new mode
+            log(`Mode switched to ${mode.toUpperCase()}.`);
+            if (isStreaming) initStream(); 
         }
 
         function updateUI() {
-            const motorConnected = !!(motorDevice && motorDevice.opened);
-            const cameraConnected = !!(cameraDevice && cameraDevice.opened);
-            
-            const isAny = motorConnected || cameraConnected;
+            const isAny = (motorDevice?.opened || cameraDevice?.opened);
             document.querySelector('.status-dot').className = `status-dot ${isAny ? 'bg-online' : 'bg-offline'}`;
             document.getElementById('statusLabel').textContent = isAny ? 'Connected' : 'Disconnected';
         }
 
-        // Listeners
         connectBtn.addEventListener('click', connect);
         initCameraBtn.addEventListener('click', initStream);
         zeroTiltBtn.addEventListener('click', () => {
             tiltRange.value = 0;
             setTilt(0);
-            log("Leveled to 0°");
         });
         tiltRange.addEventListener('change', (e) => setTilt(e.target.value));
-        ledSelect.addEventListener('change', (e) => setLED(e.target.value));
-
-        // Background logic for USB disconnects
-        navigator.usb?.addEventListener('disconnect', (e) => {
-            log("Device unplugged: " + (e.device.productName || "Unknown"));
-            updateUI();
+        ledSelect.addEventListener('change', (e) => {
+            if (motorDevice) motorDevice.controlTransferOut({
+                requestType: 'vendor', recipient: 'device',
+                request: 0x06, value: e.target.value, index: 0
+            });
         });
 
+        navigator.usb?.addEventListener('disconnect', () => {
+            isStreaming = false;
+            updateUI();
+        });
     </script>
 </body>
 </html>
