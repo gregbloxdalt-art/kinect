@@ -191,62 +191,60 @@
             }
             
             try {
-                log(`Starting ${activeMode.toUpperCase()} handshake...`, '#fbbf24');
+                log(`Handshake: ${activeMode.toUpperCase()}`, '#fbbf24');
                 
-                // 1. Reset/Init Sequence (The Registration sequence)
-                // These magical values come from the Libfreenect / OpenNI driver specs
+                // Step 1: Magic registration (Reset)
                 await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x13, value: 0x00, index: 0 });
-                
-                // 2. Set the resolution and mode
-                // 0x04 = 640x480 RGB @ 30fps
-                // 0x05 = 640x480 Depth @ 30fps
+                log("Step 1: Reset OK");
+
+                // Step 2: Set Mode
+                // 0x05=Depth, 0x04=RGB, 0x01=IR
                 let modeVal = activeMode === 'video' ? 0x04 : 0x05;
                 if (activeMode === 'ir') modeVal = 0x01;
+                
+                await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x06, value: modeVal, index: 0 });
+                log("Step 2: Mode Set OK");
 
-                await cameraDevice.controlTransferOut({
-                    requestType: 'vendor', recipient: 'device',
-                    request: 0x06, value: modeVal, index: 0
-                });
+                // Step 3: Set Resolution (0x02 = 640x480)
+                await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x0B, value: 0x02, index: 0 });
+                log("Step 3: Resolution OK");
 
-                // 3. Final Start Command
-                await cameraDevice.controlTransferOut({
-                    requestType: 'vendor', recipient: 'device',
-                    request: 0x05, value: 0x01, index: 0
-                });
+                // Step 4: Final Start Command
+                await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x05, value: 0x01, index: 0 });
+                log("Step 4: START OK!");
                 
                 isStreaming = true;
-                log("Handshake successful. Listening for data...", '#34d399');
                 placeholder.classList.add('hidden');
                 streamStatus.textContent = "STREAMING";
                 streamStatus.className = "text-green-400 font-bold";
                 
                 readLoop();
             } catch (e) {
-                log("Handshake Error: " + e.message, '#f87171');
+                log("Handshake Failed: " + e.message, '#f87171');
                 isStreaming = false;
             }
         }
 
         async function readLoop() {
-            // Endpoint 0x81 is Video/IR, 0x82 is Depth
             const endpoint = (activeMode === 'depth') ? 2 : 1; 
+            log(`Polling Endpoint 0x${(0x80 + endpoint).toString(16)}...`);
             
             while (isStreaming && cameraDevice && cameraDevice.opened) {
                 try {
-                    // We need to request data continuously
-                    const result = await cameraDevice.transferIn(endpoint, 32768); // 32KB buffer
+                    // We need a very large buffer for camera frames
+                    const result = await cameraDevice.transferIn(endpoint, 65536); 
                     
                     if (result.status === 'ok' && result.data.byteLength > 0) {
                         totalBytesReceived += result.data.byteLength;
                         dataStats.textContent = `${(totalBytesReceived / 1024).toFixed(1)} KB`;
                         renderVisualFeedback(result.data);
+                    } else if (result.status === 'stall') {
+                        log("Stall detected, clearing...", '#fbbf24');
+                        await cameraDevice.clearHalt('in', endpoint);
                     }
                 } catch (e) {
-                    if (e.name === 'NetworkError') {
-                        log("Stream stopped (Device closed)");
-                        break;
-                    }
-                    console.warn("Bulk transfer error:", e);
+                    if (e.name === 'NetworkError') break;
+                    console.warn("Transfer error:", e);
                 }
             }
         }
@@ -255,8 +253,7 @@
             const buf = new Uint8Array(dataView.buffer);
             const imageData = ctx.createImageData(canvas.width, canvas.height);
             
-            // Raw visualizer: treat stream as random grayscale to prove data is moving
-            // Note: Actual Kinect Bayer/Depth decoding is too large for this single file
+            // Raw visualizer to prove data is moving
             for (let i = 0; i < imageData.data.length; i += 4) {
                 const val = buf[i % buf.length];
                 imageData.data[i] = val;
@@ -268,10 +265,7 @@
         }
 
         async function setTilt(angle) {
-            if (!motorDevice) {
-                log("Connect Motor first!", '#f87171');
-                return;
-            }
+            if (!motorDevice) return;
             const val = angle * 2;
             try {
                 await motorDevice.controlTransferOut({
@@ -279,9 +273,9 @@
                     request: 0x31, value: val & 0xFFFF, index: 0
                 });
                 angleVal.textContent = `${angle}°`;
-                log(`Tilt -> ${angle}°`);
+                log(`Motor -> ${angle}°`);
             } catch (e) {
-                log("Tilt fail: " + e.message, '#f87171');
+                log("Motor error: " + e.message, '#f87171');
             }
         }
 
@@ -292,7 +286,7 @@
                 btn.classList.toggle('tab-active', btn.id === `mode-${mode}`);
                 btn.classList.toggle('text-slate-500', btn.id !== `mode-${mode}`);
             });
-            log(`Mode: ${mode.toUpperCase()}`);
+            log(`Target: ${mode.toUpperCase()}`);
             if (isStreaming) initStream(); 
         }
 
@@ -310,6 +304,10 @@
             setTilt(0);
         });
         
+        tiltRange.addEventListener('input', (e) => {
+             angleVal.textContent = `${e.target.value}°`;
+        });
+
         tiltRange.addEventListener('change', (e) => setTilt(parseInt(e.target.value)));
         
         ledSelect.addEventListener('change', (e) => {
