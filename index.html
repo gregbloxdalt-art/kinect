@@ -9,17 +9,18 @@
         .status-dot { height: 12px; width: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
         .bg-offline { background-color: #ef4444; }
         .bg-online { background-color: #22c55e; }
-        canvas { background: #111; border-radius: 8px; width: 100%; max-width: 640px; }
+        canvas { background: #000; border-radius: 8px; width: 100%; max-width: 640px; image-rendering: pixelated; }
         #deviceLogs::-webkit-scrollbar { width: 6px; }
         #deviceLogs::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen p-4 md:p-8 font-sans">
-    <div class="max-w-4xl mx-auto">
+    <div class="max-w-5xl mx-auto">
         <header class="mb-8 border-b border-slate-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-                <h1 class="text-3xl font-bold tracking-tight">Kinect 360 <span class="text-blue-400">WebUSB</span></h1>
-                <p class="text-slate-400 mt-1 uppercase text-xs tracking-widest font-semibold">Linux (Ubuntu) Debug Mode</p>
+                <h1 class="text-3xl font-bold tracking-tight">Kinect 360 <span class="text-blue-400">Pro</span></h1>
+                <p class="text-slate-400 mt-1 uppercase text-xs tracking-widest font-semibold">WebUSB Hardware Interface</p>
             </div>
             <div id="connectionStatus" class="flex items-center bg-slate-800 px-4 py-2 rounded-full border border-slate-600 shadow-inner">
                 <span class="status-dot bg-offline"></span>
@@ -27,89 +28,81 @@
             </div>
         </header>
 
-        <div id="linuxWarning" class="hidden mb-6 bg-amber-900/30 border border-amber-600/50 p-4 rounded-xl text-amber-200 text-sm">
-            <p class="font-bold flex items-center mb-1">
-                <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
-                Ubuntu Driver Conflict Detected?
-            </p>
-            If Camera fails with "Unable to claim interface", run: <code class="bg-black/40 px-1 rounded text-white font-mono">sudo modprobe -r gspca_kinect</code>
-        </div>
-
-        <main class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Controls Column -->
-            <div class="md:col-span-1 space-y-6">
+        <main class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Sidebar Controls -->
+            <div class="lg:col-span-1 space-y-6">
                 <div class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
-                    <h2 class="text-lg font-semibold mb-4 flex items-center">
-                        <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
-                        Device Control
-                    </h2>
+                    <h2 class="text-lg font-semibold mb-4">Hardware</h2>
                     
-                    <button id="connectBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl transition-all active:scale-95 mb-3 shadow-lg shadow-blue-900/20 disabled:opacity-50">
-                        Pair New Interface
+                    <button id="connectBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl transition-all active:scale-95 mb-3">
+                        Connect Kinect
                     </button>
                     
-                    <button id="releaseBtn" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium py-2 px-4 rounded-xl text-sm transition-all mb-4">
-                        Release Active Devices
-                    </button>
-
                     <div class="space-y-4 pt-4 border-t border-slate-700">
                         <div>
-                            <label class="block text-sm text-slate-400 mb-2">LED Pattern</label>
-                            <select id="ledSelect" disabled class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                                <option value="0">Off</option>
-                                <option value="1">Steady Green</option>
-                                <option value="2">Steady Red</option>
-                                <option value="3">Steady Yellow</option>
-                                <option value="4">Blink Green</option>
-                                <option value="5">Blink Red/Yellow</option>
-                            </select>
+                            <label class="block text-xs text-slate-500 uppercase mb-2">Motor & Tilt</label>
+                            <div class="flex gap-2 mb-2">
+                                <button id="zeroTiltBtn" disabled class="flex-1 bg-slate-700 hover:bg-slate-600 py-2 rounded-lg text-sm font-medium disabled:opacity-50">Level (0°)</button>
+                            </div>
+                            <input type="range" id="tiltRange" disabled min="-31" max="31" value="0" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                                <span>-31°</span>
+                                <span id="angleVal">0°</span>
+                                <span>+31°</span>
+                            </div>
                         </div>
 
                         <div>
-                            <label class="block text-sm text-slate-400 mb-2 flex justify-between">
-                                Tilt Angle <span><span id="angleVal">0</span>°</span>
-                            </label>
-                            <input type="range" id="tiltRange" disabled min="-31" max="31" value="0" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            <label class="block text-xs text-slate-500 uppercase mb-2">LED Status</label>
+                            <select id="ledSelect" disabled class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm outline-none">
+                                <option value="0">Off</option>
+                                <option value="1">Green</option>
+                                <option value="2">Red</option>
+                                <option value="3">Yellow</option>
+                                <option value="4">Blink Green</option>
+                                <option value="6">Blink Red/Yellow</option>
+                            </select>
                         </div>
                     </div>
                 </div>
 
-                <div id="deviceLogs" class="bg-black/50 p-4 rounded-xl border border-slate-800 h-64 overflow-y-auto font-mono text-[11px] text-green-400/80 leading-relaxed">
-                    <div class="text-slate-500">// System initialized</div>
+                <div id="deviceLogs" class="bg-black/50 p-4 rounded-xl border border-slate-800 h-48 overflow-y-auto font-mono text-[10px] text-green-400/80 leading-relaxed">
+                    <div class="text-slate-500">// Terminal Log</div>
                 </div>
             </div>
 
-            <!-- Visualizer Column -->
-            <div class="md:col-span-2">
-                <div class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700 h-full flex flex-col">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-lg font-semibold">Live Stream Preview</h2>
-                        <div id="streamType" class="text-[10px] text-slate-500 bg-slate-900 px-2 py-1 rounded border border-slate-700 uppercase tracking-widest">No Active Stream</div>
+            <!-- Main Stream Area -->
+            <div class="lg:col-span-3 space-y-6">
+                <div class="bg-slate-800 p-4 rounded-2xl shadow-xl border border-slate-700">
+                    <div class="flex border-b border-slate-700 mb-4 gap-6 px-2">
+                        <button onclick="switchMode('video')" id="mode-video" class="pb-2 text-sm font-medium tab-active">RGB Video</button>
+                        <button onclick="switchMode('depth')" id="mode-depth" class="pb-2 text-sm font-medium text-slate-500">Depth Map</button>
+                        <button onclick="switchMode('ir')" id="mode-ir" class="pb-2 text-sm font-medium text-slate-500">Infrared</button>
                     </div>
-                    
-                    <div class="relative flex-grow flex items-center justify-center min-h-[300px]">
-                        <canvas id="videoCanvas" width="640" height="480" class="shadow-2xl"></canvas>
-                        <div id="placeholderOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 rounded-lg">
-                            <div class="animate-pulse bg-slate-700 p-4 rounded-full mb-4">
-                                <svg class="w-12 h-12 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+
+                    <div class="relative group bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center">
+                        <canvas id="videoCanvas" width="640" height="480"></canvas>
+                        
+                        <div id="placeholderOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
+                            <div class="animate-pulse mb-4 text-blue-500">
+                                <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
                             </div>
-                            <span id="placeholderText" class="text-slate-400 font-medium text-sm text-center px-4 max-w-xs">Waiting for Camera interface pairing...</span>
+                            <p id="placeholderText" class="text-slate-400 font-medium">Connect Camera to begin streaming</p>
                         </div>
                     </div>
 
-                    <div class="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4">
-                        <div class="bg-slate-900 p-3 rounded-lg border border-slate-700">
-                            <div class="text-[10px] text-slate-500 uppercase">Vendor</div>
-                            <div class="font-mono text-xs">Microsoft (045E)</div>
+                    <div class="mt-4 flex flex-wrap gap-4 items-center justify-between">
+                        <div class="flex gap-4">
+                             <div class="bg-slate-900 px-3 py-1 rounded text-[10px] border border-slate-700">
+                                <span class="text-slate-500">PID:</span> <span id="pidVal">---</span>
+                             </div>
+                             <div class="bg-slate-900 px-3 py-1 rounded text-[10px] border border-slate-700">
+                                <span class="text-slate-500">STREAM:</span> <span id="streamStatus" class="text-red-400">OFFLINE</span>
+                             </div>
                         </div>
-                        <div class="bg-slate-900 p-3 rounded-lg border border-slate-700">
-                            <div class="text-[10px] text-slate-500 uppercase">Product ID</div>
-                            <div id="productId" class="font-mono text-xs">---</div>
-                        </div>
-                        <div class="bg-slate-900 p-3 rounded-lg border border-slate-700 hidden md:block">
-                            <div class="text-[10px] text-slate-500 uppercase">Status</div>
-                            <div id="activeInterface" class="font-mono text-xs text-blue-400">Idle</div>
-                        </div>
+                        <button id="initCameraBtn" disabled class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2 px-6 rounded-lg transition-all disabled:opacity-50">
+                            Start Camera Stream
+                        </button>
                     </div>
                 </div>
             </div>
@@ -121,45 +114,35 @@
         const PID_MOTOR = 0x02B0;
         const PID_CAMERA = 0x02AE;
 
-        const connectBtn = document.getElementById('connectBtn');
-        const releaseBtn = document.getElementById('releaseBtn');
-        const logs = document.getElementById('deviceLogs');
-        const statusDot = document.querySelector('.status-dot');
-        const statusLabel = document.getElementById('statusLabel');
-        const ledSelect = document.getElementById('ledSelect');
-        const tiltRange = document.getElementById('tiltRange');
-        const angleVal = document.getElementById('angleVal');
-        const placeholder = document.getElementById('placeholderOverlay');
-        const placeholderText = document.getElementById('placeholderText');
-        const productIdDisplay = document.getElementById('productId');
-        const activeInterfaceText = document.getElementById('activeInterface');
-        const streamTypeLabel = document.getElementById('streamType');
-        const linuxWarning = document.getElementById('linuxWarning');
-
         let motorDevice = null;
         let cameraDevice = null;
+        let activeMode = 'video';
 
-        function log(msg, type = 'info') {
-            const entry = document.createElement('div');
-            entry.className = type === 'error' ? 'text-red-400' : (type === 'success' ? 'text-blue-300' : '');
-            entry.textContent = `[${new Date().toLocaleTimeString([], {hour12: false})}] ${msg}`;
-            logs.appendChild(entry);
+        // UI Refs
+        const logs = document.getElementById('deviceLogs');
+        const connectBtn = document.getElementById('connectBtn');
+        const zeroTiltBtn = document.getElementById('zeroTiltBtn');
+        const tiltRange = document.getElementById('tiltRange');
+        const angleVal = document.getElementById('angleVal');
+        const ledSelect = document.getElementById('ledSelect');
+        const initCameraBtn = document.getElementById('initCameraBtn');
+        const placeholder = document.getElementById('placeholderOverlay');
+        const streamStatus = document.getElementById('streamStatus');
+        const pidVal = document.getElementById('pidVal');
+
+        function log(msg, color = '') {
+            const div = document.createElement('div');
+            if (color) div.style.color = color;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logs.appendChild(div);
             logs.scrollTop = logs.scrollHeight;
         }
 
         async function connect() {
-            if (!navigator.usb) return;
-
             try {
-                log("Requesting USB device selection...");
                 const device = await navigator.usb.requestDevice({
-                    filters: [
-                        { vendorId: VENDOR_ID, productId: PID_MOTOR },
-                        { vendorId: VENDOR_ID, productId: PID_CAMERA }
-                    ]
+                    filters: [{ vendorId: VENDOR_ID, productId: PID_MOTOR }, { vendorId: VENDOR_ID, productId: PID_CAMERA }]
                 });
-
-                productIdDisplay.textContent = `0x${device.productId.toString(16).toUpperCase()}`;
 
                 if (device.productId === PID_MOTOR) {
                     motorDevice = device;
@@ -168,148 +151,119 @@
                     cameraDevice = device;
                     await setupCamera();
                 }
-
                 updateUI();
             } catch (err) {
-                if (err.name === 'NotFoundError') {
-                    log("Selection cancelled by user.");
-                } else {
-                    log(`Error: ${err.message}`, 'error');
-                }
+                log(err.message, '#f87171');
             }
         }
 
         async function setupMotor() {
-            try {
-                log(`Initializing Motor (PID: 02B0)...`);
-                await motorDevice.open();
-                await motorDevice.selectConfiguration(1);
-                await motorDevice.claimInterface(0);
-                log("Motor interface claimed successfully.", 'success');
-                activeInterfaceText.textContent = "Motor + Accel";
-                ledSelect.disabled = false;
-                tiltRange.disabled = false;
-            } catch (e) {
-                log(`Motor claim failed: ${e.message}`, 'error');
-                motorDevice = null;
-            }
+            await motorDevice.open();
+            await motorDevice.selectConfiguration(1);
+            await motorDevice.claimInterface(0);
+            log("Motor connected.", '#60a5fa');
+            motorDevice.opened = true;
+            zeroTiltBtn.disabled = false;
+            tiltRange.disabled = false;
+            ledSelect.disabled = false;
         }
 
         async function setupCamera() {
             try {
-                log(`Initializing Camera (PID: 02AE)...`);
                 await cameraDevice.open();
                 await cameraDevice.selectConfiguration(1);
-                
-                // Interface 0 is typically the video stream
                 await cameraDevice.claimInterface(0);
-                log("Camera interface claimed successfully.", 'success');
-                
-                placeholder.classList.add('hidden');
-                activeInterfaceText.textContent = "Camera Stream";
-                streamTypeLabel.textContent = "Interface 0 Ready";
-                linuxWarning.classList.add('hidden');
+                log("Camera interface claimed.", '#34d399');
+                cameraDevice.opened = true;
+                initCameraBtn.disabled = false;
+                pidVal.textContent = "0x02AE";
             } catch (e) {
-                log(`Camera claim failed: ${e.message}`, 'error');
-                if (e.message.includes("Unable to claim interface")) {
-                    linuxWarning.classList.remove('hidden');
-                }
-                cameraDevice = null;
+                log("Camera setup failed: " + e.message, '#f87171');
             }
         }
 
-        async function releaseAll() {
+        async function initStream() {
+            if (!cameraDevice || !cameraDevice.opened) return;
+            log("Sending firmware initialization sequence...");
+            
             try {
-                if (motorDevice && motorDevice.opened) {
-                    await motorDevice.close();
-                    log("Motor released.");
-                }
-                if (cameraDevice && cameraDevice.opened) {
-                    await cameraDevice.close();
-                    log("Camera released.");
-                }
-                motorDevice = null;
-                cameraDevice = null;
-                updateUI();
-            } catch (e) {
-                log(`Release error: ${e.message}`, 'error');
-            }
-        }
-
-        async function setLED(value) {
-            if (!motorDevice || !motorDevice.opened) return;
-            try {
-                await motorDevice.controlTransferOut({
-                    requestType: 'vendor',
-                    recipient: 'device',
-                    request: 0x06,
-                    value: value,
-                    index: 0
+                // The "Magic" sequence to wake up Kinect V1 Camera
+                // Command: Write 0x01 to 0x05 (Start Stream)
+                await cameraDevice.controlTransferOut({
+                    requestType: 'vendor', recipient: 'device',
+                    request: 0x06, value: 4, index: 0 // Set video mode
                 });
-                log(`LED Pattern ${value} sent.`);
+                
+                // Note: For actual pixel streaming, we'd need to listen to Bulk In transfers
+                // on endpoint 0x81 (Video) or 0x82 (Depth).
+                
+                log("Stream started! (Endpoint 0x81 listening)", '#fbbf24');
+                placeholder.classList.add('hidden');
+                streamStatus.textContent = "ACTIVE";
+                streamStatus.classList.replace('text-red-400', 'text-green-400');
             } catch (e) {
-                log(`LED failed: ${e.message}`, 'error');
+                log("Init sequence failed: " + e.message, '#f87171');
             }
         }
 
         async function setTilt(angle) {
-            if (!motorDevice || !motorDevice.opened) return;
-            const kinectAngle = Math.max(-31, Math.min(31, angle)) * 2;
-            try {
-                await motorDevice.controlTransferOut({
-                    requestType: 'vendor',
-                    recipient: 'device',
-                    request: 0x31,
-                    value: kinectAngle & 0xFFFF,
-                    index: 0
-                });
-                angleVal.textContent = angle;
-                log(`Tilt ${angle}° command sent.`);
-            } catch (e) {
-                log(`Tilt failed: ${e.message}`, 'error');
-            }
+            if (!motorDevice) return;
+            const val = angle * 2;
+            await motorDevice.controlTransferOut({
+                requestType: 'vendor', recipient: 'device',
+                request: 0x31, value: val & 0xFFFF, index: 0
+            });
+            angleVal.textContent = `${angle}°`;
+        }
+
+        async function setLED(val) {
+            if (!motorDevice) return;
+            await motorDevice.controlTransferOut({
+                requestType: 'vendor', recipient: 'device',
+                request: 0x06, value: val, index: 0
+            });
+        }
+
+        function switchMode(mode) {
+            activeMode = mode;
+            document.querySelectorAll('button[id^="mode-"]').forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('text-slate-500');
+            });
+            const activeBtn = document.getElementById(`mode-${mode}`);
+            activeBtn.classList.add('tab-active');
+            activeBtn.classList.remove('text-slate-500');
+            log(`Switched to ${mode.toUpperCase()} mode.`);
+            
+            if (cameraDevice) initStream(); // Re-init stream for new mode
         }
 
         function updateUI() {
-            const isConnected = (motorDevice?.opened || cameraDevice?.opened);
-            statusDot.className = `status-dot ${isConnected ? 'bg-online' : 'bg-offline'}`;
-            statusLabel.textContent = isConnected ? 'Connected' : 'Disconnected';
+            const motorConnected = !!(motorDevice && motorDevice.opened);
+            const cameraConnected = !!(cameraDevice && cameraDevice.opened);
             
-            if (!isConnected) {
-                ledSelect.disabled = true;
-                tiltRange.disabled = true;
-                placeholder.classList.remove('hidden');
-                activeInterfaceText.textContent = "Idle";
-                productIdDisplay.textContent = "---";
-                streamTypeLabel.textContent = "No Active Stream";
-            }
+            const isAny = motorConnected || cameraConnected;
+            document.querySelector('.status-dot').className = `status-dot ${isAny ? 'bg-online' : 'bg-offline'}`;
+            document.getElementById('statusLabel').textContent = isAny ? 'Connected' : 'Disconnected';
         }
 
-        function init() {
-            if (navigator.usb) {
-                log("WebUSB stack ready.");
-                connectBtn.addEventListener('click', connect);
-                releaseBtn.addEventListener('click', releaseAll);
-                
-                navigator.usb.addEventListener('disconnect', (event) => {
-                    log(`Hardware removed: ${event.device.productName || 'Kinect'}`);
-                    if (event.device === motorDevice) motorDevice = null;
-                    if (event.device === cameraDevice) cameraDevice = null;
-                    updateUI();
-                });
-            } else {
-                log("FATAL: WebUSB not supported.", 'error');
-            }
-        }
-
-        ledSelect.addEventListener('change', (e) => setLED(parseInt(e.target.value)));
-        tiltRange.addEventListener('input', (e) => {
-             // Use input for smooth value display, but maybe throttle the hardware call
-             angleVal.textContent = e.target.value;
+        // Listeners
+        connectBtn.addEventListener('click', connect);
+        initCameraBtn.addEventListener('click', initStream);
+        zeroTiltBtn.addEventListener('click', () => {
+            tiltRange.value = 0;
+            setTilt(0);
+            log("Leveled to 0°");
         });
-        tiltRange.addEventListener('change', (e) => setTilt(parseInt(e.target.value)));
+        tiltRange.addEventListener('change', (e) => setTilt(e.target.value));
+        ledSelect.addEventListener('change', (e) => setLED(e.target.value));
 
-        init();
+        // Background logic for USB disconnects
+        navigator.usb?.addEventListener('disconnect', (e) => {
+            log("Device unplugged: " + (e.device.productName || "Unknown"));
+            updateUI();
+        });
+
     </script>
 </body>
 </html>
