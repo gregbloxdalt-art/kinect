@@ -20,7 +20,7 @@
         <header class="mb-8 border-b border-slate-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight">Kinect 360 <span class="text-blue-400">Pro</span></h1>
-                <p class="text-slate-400 mt-1 uppercase text-xs tracking-widest font-semibold">WebUSB Hardware Interface (Ubuntu 25 Optimized)</p>
+                <p class="text-slate-400 mt-1 uppercase text-xs tracking-widest font-semibold">WebUSB LibFreenect Emulation</p>
             </div>
             <div id="connectionStatus" class="flex items-center bg-slate-800 px-4 py-2 rounded-full border border-slate-600 shadow-inner">
                 <span class="status-dot bg-offline"></span>
@@ -29,7 +29,6 @@
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <!-- Sidebar Controls -->
             <div class="lg:col-span-1 space-y-6">
                 <div class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
                     <h2 class="text-lg font-semibold mb-4 text-blue-400">Hardware</h2>
@@ -55,7 +54,6 @@
                 </div>
             </div>
 
-            <!-- Main Stream Area -->
             <div class="lg:col-span-3 space-y-6">
                 <div class="bg-slate-800 p-4 rounded-2xl shadow-xl border border-slate-700">
                     <div class="flex border-b border-slate-700 mb-4 gap-6 px-2">
@@ -66,7 +64,7 @@
                     <div class="relative group bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border border-slate-900 shadow-2xl">
                         <canvas id="videoCanvas" width="640" height="480"></canvas>
                         <div id="placeholderOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
-                            <p id="placeholderText" class="text-slate-400 font-medium italic">Stream Ready</p>
+                            <p id="placeholderText" class="text-slate-400 font-medium italic">Ready for Handshake</p>
                         </div>
                     </div>
 
@@ -76,8 +74,8 @@
                                 <span class="text-slate-500 uppercase font-bold">Data:</span> <span id="dataStats" class="text-blue-400 font-mono">0.0 KB</span>
                              </div>
                         </div>
-                        <button id="initCameraBtn" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2.5 px-8 rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50">
-                            Unlock Camera Stream
+                        <button id="initCameraBtn" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2.5 px-8 rounded-xl shadow-lg transition-all active:scale-95">
+                            Sync Camera (LibFreenect Logic)
                         </button>
                     </div>
                 </div>
@@ -92,7 +90,6 @@
 
         let motorDevice = null, cameraDevice = null;
         let activeMode = 'video', isStreaming = false, totalBytesReceived = 0;
-        let camSeq = 0;
 
         const logs = document.getElementById('deviceLogs');
         const canvas = document.getElementById('videoCanvas');
@@ -134,60 +131,55 @@
             
             try {
                 isStreaming = false;
-                log(`Starting Robust Handshake: ${activeMode.toUpperCase()}...`, '#fbbf24');
+                log(`Executing LibFreenect sequence...`, '#fbbf24');
                 
-                const write = async (req, val, idx) => {
-                    camSeq++;
+                const write = async (req, val) => {
+                    log(`write_reg: 0x${req.toString(16).padStart(4, '0')} <= 0x${val.toString(16).padStart(2, '0')}`);
                     return cameraDevice.controlTransferOut({
                         requestType: 'vendor', recipient: 'device',
-                        request: req, value: val, index: idx
+                        request: req, value: val, index: 0
                     });
                 };
 
-                // STEP 1: Hard Firmware Reset (Req 0x13)
-                log("Resetting firmware...");
-                await write(0x13, 0x00, 0x00);
-                await new Promise(r => setTimeout(r, 100)); // Crucial delay for Linux USB stack
-
-                // STEP 2: Set Mode Selection (Req 0x06)
-                // Video: 0x04, Depth: 0x05
-                const modeId = activeMode === 'video' ? 0x04 : 0x05;
-                log(`Selecting mode: ${activeMode}`);
-                await write(0x06, modeId, 0x00);
-
-                // STEP 3: Set Frame Resolution (Req 0x0B)
-                // 640x480 is 0x02
-                log("Setting resolution 640x480...");
-                await write(0x0B, 0x02, 0x00);
-
-                // STEP 4: Camera Flag Sync (Req 0x06)
-                await write(0x06, modeId, 0x00);
-
-                // STEP 5: Data Stream Start (Req 0x05)
-                log("Executing Stream Start...");
-                await write(0x05, 0x01, 0x00);
+                // Exact sequence from freenect-glview log
+                await write(0x0105, 0x00);
+                await write(0x0006, 0x00);
+                await write(0x0012, 0x03);
+                await write(0x0013, 0x01);
+                await write(0x0014, 0x1e);
                 
-                log("HANDSHAKE SUCCESSFUL.", '#34d399');
+                // Mode setting (0x02 for video as per your log)
+                let modeVal = activeMode === 'video' ? 0x02 : 0x05;
+                await write(0x0006, modeVal);
+                
+                await write(0x0017, 0x00);
+                
+                // Resolution / FPS settings
+                await write(0x000c, 0x00);
+                await write(0x000d, 0x01);
+                await write(0x000e, 0x1e);
+
+                // Start Stream
+                await write(0x0005, 0x01);
+                
+                log("SEQUENCE COMPLETE.", '#34d399');
                 
                 totalBytesReceived = 0;
                 isStreaming = true;
                 document.getElementById('placeholderOverlay').classList.add('hidden');
                 readLoop();
             } catch (e) {
-                log("HANDSHAKE FAILED: " + e.message, '#f87171');
-                log("Tip: Try unplugging/replugging the Kinect USB.", '#94a3b8');
+                log("SEQ FAIL: " + e.message, '#f87171');
             }
         }
 
         async function readLoop() {
-            const ep = (activeMode === 'depth') ? 2 : 1;
-            log(`Polling Endpoint 0x${(0x80 + ep).toString(16)}...`);
+            const ep = 1; // Endpoint for video
+            log(`Reading from EP 0x${(0x80 + ep).toString(16)}...`);
             
             while (isStreaming && cameraDevice?.opened) {
                 try {
-                    // Buffer must be exactly 64K for high-bandwidth ISO transfers
                     const result = await cameraDevice.transferIn(ep, 65536);
-                    
                     if (result.status === 'ok' && result.data.byteLength > 0) {
                         totalBytesReceived += result.data.byteLength;
                         document.getElementById('dataStats').textContent = `${(totalBytesReceived / 1024).toFixed(1)} KB`;
@@ -195,26 +187,16 @@
                     } else if (result.status === 'stall') {
                         await cameraDevice.clearHalt('in', ep);
                     }
-                } catch (e) {
-                    if (e.name === 'NetworkError') {
-                        log("Stream interrupted.", '#f87171');
-                        break;
-                    }
-                }
+                } catch (e) { if (e.name === 'NetworkError') break; }
             }
         }
 
         function renderFrame(data) {
             const buf = new Uint8Array(data.buffer);
             const img = ctx.createImageData(640, 480);
-            
-            // Raw visualizer: Map bytes to grayscale RGB
             for (let i = 0; i < img.data.length; i += 4) {
                 const val = buf[i % buf.length] || 0;
-                img.data[i] = val;     // R
-                img.data[i+1] = val;   // G
-                img.data[i+2] = val;   // B
-                img.data[i+3] = 255;   // A
+                img.data[i] = val; img.data[i+1] = val; img.data[i+2] = val; img.data[i+3] = 255;
             }
             ctx.putImageData(img, 0, 0);
         }
@@ -231,13 +213,11 @@
         }
 
         function switchMode(m) {
-            if (activeMode === m) return;
             activeMode = m;
             document.querySelectorAll('button[onclick^="switchMode"]').forEach(b => {
                 b.classList.toggle('tab-active', b.id === `mode-${m}`);
                 b.classList.toggle('text-slate-500', b.id !== `mode-${m}`);
             });
-            log(`Target mode: ${m.toUpperCase()}`);
             if (isStreaming) initStream();
         }
 
@@ -250,15 +230,6 @@
         document.getElementById('connectBtn').addEventListener('click', connect);
         document.getElementById('initCameraBtn').addEventListener('click', initStream);
         document.getElementById('tiltRange').addEventListener('change', (e) => setTilt(parseInt(e.target.value)));
-        
-        navigator.usb?.addEventListener('disconnect', (event) => {
-            if (event.device === cameraDevice) {
-                isStreaming = false;
-                cameraDevice = null;
-                log("Camera disconnected.");
-            }
-            updateUI();
-        });
     </script>
 </body>
 </html>
