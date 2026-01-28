@@ -20,7 +20,7 @@
         <header class="mb-8 border-b border-slate-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight">Kinect 360 <span class="text-blue-400">Pro</span></h1>
-                <p class="text-slate-400 mt-1 uppercase text-xs tracking-widest font-semibold">WebUSB Hardware Interface</p>
+                <p class="text-slate-400 mt-1 uppercase text-xs tracking-widest font-semibold">WebUSB Hardware Interface (Linux Edition)</p>
             </div>
             <div id="connectionStatus" class="flex items-center bg-slate-800 px-4 py-2 rounded-full border border-slate-600 shadow-inner">
                 <span class="status-dot bg-offline"></span>
@@ -29,7 +29,6 @@
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <!-- Sidebar Controls -->
             <div class="lg:col-span-1 space-y-6">
                 <div class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
                     <h2 class="text-lg font-semibold mb-4 text-blue-400">Hardware</h2>
@@ -41,9 +40,6 @@
                     <div class="space-y-4 pt-4 border-t border-slate-700">
                         <div>
                             <label class="block text-xs text-slate-500 uppercase mb-2 font-bold">Motor & Tilt</label>
-                            <div class="flex gap-2 mb-2">
-                                <button id="zeroTiltBtn" class="flex-1 bg-slate-700 hover:bg-slate-600 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-600 active:bg-slate-500">Level (0°)</button>
-                            </div>
                             <input type="range" id="tiltRange" min="-31" max="31" value="0" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                             <div class="flex justify-between text-[10px] text-slate-500 mt-1">
                                 <span>-31°</span>
@@ -51,16 +47,13 @@
                                 <span>+31°</span>
                             </div>
                         </div>
-
                         <div>
                             <label class="block text-xs text-slate-500 uppercase mb-2 font-bold">LED Status</label>
-                            <select id="ledSelect" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
-                                <option value="0">Off</option>
+                            <select id="ledSelect" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-sm outline-none">
                                 <option value="1">Steady Green</option>
                                 <option value="2">Steady Red</option>
                                 <option value="3">Steady Yellow</option>
                                 <option value="4">Blink Green</option>
-                                <option value="6">Blink Red/Yellow</option>
                             </select>
                         </div>
                     </div>
@@ -71,36 +64,25 @@
                 </div>
             </div>
 
-            <!-- Main Stream Area -->
             <div class="lg:col-span-3 space-y-6">
                 <div class="bg-slate-800 p-4 rounded-2xl shadow-xl border border-slate-700">
                     <div class="flex border-b border-slate-700 mb-4 gap-6 px-2">
-                        <button onclick="switchMode('video')" id="mode-video" class="pb-2 text-sm font-medium tab-active transition-colors">RGB Video</button>
-                        <button onclick="switchMode('depth')" id="mode-depth" class="pb-2 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors">Depth Map</button>
-                        <button onclick="switchMode('ir')" id="mode-ir" class="pb-2 text-sm font-medium text-slate-500 hover:text-slate-300 transition-colors">Infrared</button>
+                        <button onclick="switchMode('video')" id="mode-video" class="pb-2 text-sm font-medium tab-active">RGB Video</button>
+                        <button onclick="switchMode('depth')" id="mode-depth" class="pb-2 text-sm font-medium text-slate-500">Depth Map</button>
                     </div>
 
-                    <div class="relative group bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border border-slate-900 shadow-2xl">
+                    <div class="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border border-slate-900 shadow-2xl">
                         <canvas id="videoCanvas" width="640" height="480"></canvas>
-                        
                         <div id="placeholderOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
-                            <div class="animate-pulse mb-4 text-blue-500">
-                                <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
-                            </div>
-                            <p id="placeholderText" class="text-slate-400 font-medium">Connect Camera to begin streaming</p>
+                            <p class="text-slate-400 font-medium">Waiting for hardware...</p>
                         </div>
                     </div>
 
                     <div class="mt-4 flex flex-wrap gap-4 items-center justify-between">
-                        <div class="flex gap-4">
-                             <div class="bg-slate-900 px-3 py-1.5 rounded-lg text-[10px] border border-slate-700 shadow-inner">
-                                <span class="text-slate-500 uppercase font-bold">Data:</span> <span id="dataStats" class="text-blue-400 font-mono">0.0 KB</span>
-                             </div>
-                             <div class="bg-slate-900 px-3 py-1.5 rounded-lg text-[10px] border border-slate-700 shadow-inner">
-                                <span class="text-slate-500 uppercase font-bold">Stream:</span> <span id="streamStatus" class="text-red-400 font-bold">OFFLINE</span>
-                             </div>
+                        <div class="bg-slate-900 px-3 py-1.5 rounded-lg text-[10px] border border-slate-700">
+                            <span class="text-slate-500 uppercase font-bold">Throughput:</span> <span id="dataStats" class="text-blue-400 font-mono">0.0 KB</span>
                         </div>
-                        <button id="initCameraBtn" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2.5 px-8 rounded-xl transition-all disabled:opacity-30 shadow-lg shadow-green-900/20 active:scale-95">
+                        <button id="initCameraBtn" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2.5 px-8 rounded-xl shadow-lg transition-all active:scale-95">
                             Start Camera Stream
                         </button>
                     </div>
@@ -114,29 +96,17 @@
         const PID_MOTOR = 0x02B0;
         const PID_CAMERA = 0x02AE;
 
-        let motorDevice = null;
-        let cameraDevice = null;
-        let activeMode = 'video';
-        let isStreaming = false;
-        let totalBytesReceived = 0;
+        let motorDevice = null, cameraDevice = null;
+        let activeMode = 'video', isStreaming = false, totalBytesReceived = 0;
 
         const logs = document.getElementById('deviceLogs');
-        const connectBtn = document.getElementById('connectBtn');
-        const zeroTiltBtn = document.getElementById('zeroTiltBtn');
-        const tiltRange = document.getElementById('tiltRange');
-        const angleVal = document.getElementById('angleVal');
-        const ledSelect = document.getElementById('ledSelect');
-        const initCameraBtn = document.getElementById('initCameraBtn');
-        const placeholder = document.getElementById('placeholderOverlay');
-        const streamStatus = document.getElementById('streamStatus');
-        const dataStats = document.getElementById('dataStats');
         const canvas = document.getElementById('videoCanvas');
         const ctx = canvas.getContext('2d');
 
         function log(msg, color = '') {
             const div = document.createElement('div');
             if (color) div.style.color = color;
-            div.textContent = `[${new Date().toLocaleTimeString([], {hour12:false})}] ${msg}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
             logs.appendChild(div);
             logs.scrollTop = logs.scrollHeight;
         }
@@ -150,176 +120,102 @@
                 if (device.productId === PID_MOTOR) {
                     motorDevice = device;
                     await setupMotor();
-                } else if (device.productId === PID_CAMERA) {
+                } else {
                     cameraDevice = device;
                     await setupCamera();
                 }
                 updateUI();
-            } catch (err) {
-                log(err.message, '#f87171');
-            }
+            } catch (err) { log(err.message, '#f87171'); }
         }
 
         async function setupMotor() {
-            try {
-                await motorDevice.open();
-                await motorDevice.selectConfiguration(1);
-                await motorDevice.claimInterface(0);
-                log("Motor interface active.", '#60a5fa');
-                motorDevice.opened = true;
-            } catch (e) {
-                log("Motor fail: " + e.message, '#f87171');
-            }
+            await motorDevice.open();
+            await motorDevice.selectConfiguration(1);
+            await motorDevice.claimInterface(0);
+            log("Motor initialized.", '#60a5fa');
         }
 
         async function setupCamera() {
             try {
                 await cameraDevice.open();
                 await cameraDevice.selectConfiguration(1);
+                // Attempt to claim interface. On Linux this often fails if driver is loaded.
                 await cameraDevice.claimInterface(0);
-                log("Camera interface active.", '#34d399');
-                cameraDevice.opened = true;
+                log("Camera interface claimed.", '#34d399');
             } catch (e) {
-                log("Camera fail: " + e.message, '#f87171');
+                log("CLAIM FAILED: " + e.message, '#fbbf24');
+                log("Try: 'sudo modprobe -r gspca_kinect'", '#fbbf24');
             }
         }
 
         async function initStream() {
-            if (!cameraDevice || !cameraDevice.opened) {
-                log("Connect Camera first!", '#f87171');
-                return;
-            }
-            
+            if (!cameraDevice?.opened) return log("Connect Camera first!");
             try {
-                log(`Handshake: ${activeMode.toUpperCase()}`, '#fbbf24');
+                log(`Handshake: ${activeMode.toUpperCase()}`);
                 
-                // Step 1: Magic registration (Reset)
+                // Sequence used by libfreenect for Linux
+                await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x40, value: 0x00, index: 0 });
                 await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x13, value: 0x00, index: 0 });
-                log("Step 1: Reset OK");
-
-                // Step 2: Set Mode
-                // 0x05=Depth, 0x04=RGB, 0x01=IR
+                
                 let modeVal = activeMode === 'video' ? 0x04 : 0x05;
-                if (activeMode === 'ir') modeVal = 0x01;
-                
                 await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x06, value: modeVal, index: 0 });
-                log("Step 2: Mode Set OK");
-
-                // Step 3: Set Resolution (0x02 = 640x480)
                 await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x0B, value: 0x02, index: 0 });
-                log("Step 3: Resolution OK");
-
-                // Step 4: Final Start Command
                 await cameraDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x05, value: 0x01, index: 0 });
-                log("Step 4: START OK!");
                 
+                log("Handshake OK. Listening...");
                 isStreaming = true;
-                placeholder.classList.add('hidden');
-                streamStatus.textContent = "STREAMING";
-                streamStatus.className = "text-green-400 font-bold";
-                
+                document.getElementById('placeholderOverlay').classList.add('hidden');
                 readLoop();
-            } catch (e) {
-                log("Handshake Failed: " + e.message, '#f87171');
-                isStreaming = false;
-            }
+            } catch (e) { log("Handshake Fail: " + e.message, '#f87171'); }
         }
 
         async function readLoop() {
-            const endpoint = (activeMode === 'depth') ? 2 : 1; 
-            log(`Polling Endpoint 0x${(0x80 + endpoint).toString(16)}...`);
-            
-            while (isStreaming && cameraDevice && cameraDevice.opened) {
+            const ep = (activeMode === 'depth') ? 2 : 1;
+            while (isStreaming && cameraDevice?.opened) {
                 try {
-                    // We need a very large buffer for camera frames
-                    const result = await cameraDevice.transferIn(endpoint, 65536); 
-                    
-                    if (result.status === 'ok' && result.data.byteLength > 0) {
-                        totalBytesReceived += result.data.byteLength;
-                        dataStats.textContent = `${(totalBytesReceived / 1024).toFixed(1)} KB`;
-                        renderVisualFeedback(result.data);
-                    } else if (result.status === 'stall') {
-                        log("Stall detected, clearing...", '#fbbf24');
-                        await cameraDevice.clearHalt('in', endpoint);
+                    const res = await cameraDevice.transferIn(ep, 65536);
+                    if (res.status === 'ok' && res.data.byteLength > 0) {
+                        totalBytesReceived += res.data.byteLength;
+                        document.getElementById('dataStats').textContent = `${(totalBytesReceived / 1024).toFixed(1)} KB`;
+                        render(res.data);
                     }
-                } catch (e) {
-                    if (e.name === 'NetworkError') break;
-                    console.warn("Transfer error:", e);
-                }
+                } catch (e) { if (e.name === 'NetworkError') break; }
             }
         }
 
-        function renderVisualFeedback(dataView) {
-            const buf = new Uint8Array(dataView.buffer);
-            const imageData = ctx.createImageData(canvas.width, canvas.height);
-            
-            // Raw visualizer to prove data is moving
-            for (let i = 0; i < imageData.data.length; i += 4) {
-                const val = buf[i % buf.length];
-                imageData.data[i] = val;
-                imageData.data[i+1] = val;
-                imageData.data[i+2] = val;
-                imageData.data[i+3] = 255;
+        function render(data) {
+            const buf = new Uint8Array(data.buffer);
+            const img = ctx.createImageData(640, 480);
+            for (let i = 0; i < img.data.length; i += 4) {
+                const v = buf[i % buf.length] || 0;
+                img.data[i] = v; img.data[i+1] = v; img.data[i+2] = v; img.data[i+3] = 255;
             }
-            ctx.putImageData(imageData, 0, 0);
+            ctx.putImageData(img, 0, 0);
         }
 
         async function setTilt(angle) {
-            if (!motorDevice) return;
-            const val = angle * 2;
-            try {
-                await motorDevice.controlTransferOut({
-                    requestType: 'vendor', recipient: 'device',
-                    request: 0x31, value: val & 0xFFFF, index: 0
-                });
-                angleVal.textContent = `${angle}°`;
-                log(`Motor -> ${angle}°`);
-            } catch (e) {
-                log("Motor error: " + e.message, '#f87171');
-            }
+            if (!motorDevice?.opened) return;
+            await motorDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x31, value: (angle * 2) & 0xFFFF, index: 0 });
+            document.getElementById('angleVal').textContent = `${angle}°`;
         }
 
-        function switchMode(mode) {
-            if (activeMode === mode) return;
-            activeMode = mode;
-            document.querySelectorAll('button[id^="mode-"]').forEach(btn => {
-                btn.classList.toggle('tab-active', btn.id === `mode-${mode}`);
-                btn.classList.toggle('text-slate-500', btn.id !== `mode-${mode}`);
-            });
-            log(`Target: ${mode.toUpperCase()}`);
-            if (isStreaming) initStream(); 
+        function switchMode(m) {
+            activeMode = m;
+            document.querySelectorAll('button[onclick^="switchMode"]').forEach(b => b.classList.toggle('tab-active', b.id === `mode-${m}`));
+            if (isStreaming) initStream();
         }
 
         function updateUI() {
-            const isAny = (motorDevice?.opened || cameraDevice?.opened);
-            document.querySelector('.status-dot').className = `status-dot ${isAny ? 'bg-online' : 'bg-offline'}`;
-            document.getElementById('statusLabel').textContent = isAny ? 'Connected' : 'Disconnected';
+            const any = motorDevice?.opened || cameraDevice?.opened;
+            document.querySelector('.status-dot').className = `status-dot ${any ? 'bg-online' : 'bg-offline'}`;
+            document.getElementById('statusLabel').textContent = any ? 'Connected' : 'Disconnected';
         }
 
-        connectBtn.addEventListener('click', connect);
-        initCameraBtn.addEventListener('click', initStream);
-        
-        zeroTiltBtn.addEventListener('click', () => {
-            tiltRange.value = 0;
-            setTilt(0);
-        });
-        
-        tiltRange.addEventListener('input', (e) => {
-             angleVal.textContent = `${e.target.value}°`;
-        });
-
-        tiltRange.addEventListener('change', (e) => setTilt(parseInt(e.target.value)));
-        
-        ledSelect.addEventListener('change', (e) => {
-            if (motorDevice) motorDevice.controlTransferOut({
-                requestType: 'vendor', recipient: 'device',
-                request: 0x06, value: e.target.value, index: 0
-            });
-        });
-
-        navigator.usb?.addEventListener('disconnect', () => {
-            isStreaming = false;
-            updateUI();
+        document.getElementById('connectBtn').addEventListener('click', connect);
+        document.getElementById('initCameraBtn').addEventListener('click', initStream);
+        document.getElementById('tiltRange').addEventListener('change', (e) => setTilt(parseInt(e.target.value)));
+        document.getElementById('ledSelect').addEventListener('change', (e) => {
+            if (motorDevice?.opened) motorDevice.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0x06, value: e.target.value, index: 0 });
         });
     </script>
 </body>
