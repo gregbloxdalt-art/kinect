@@ -20,7 +20,7 @@
         <header class="mb-8 border-b border-slate-700 pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight">Kinect 360 <span class="text-blue-400">Pro</span></h1>
-                <p class="text-slate-400 mt-1 uppercase text-xs tracking-widest font-semibold">WebUSB LibFreenect Emulation</p>
+                <p class="text-slate-400 mt-1 uppercase text-xs tracking-widest font-semibold">WebUSB Hardware Interface (Kernel Optimized)</p>
             </div>
             <div id="connectionStatus" class="flex items-center bg-slate-800 px-4 py-2 rounded-full border border-slate-600 shadow-inner">
                 <span class="status-dot bg-offline"></span>
@@ -64,18 +64,18 @@
                     <div class="relative group bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border border-slate-900 shadow-2xl">
                         <canvas id="videoCanvas" width="640" height="480"></canvas>
                         <div id="placeholderOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
-                            <p id="placeholderText" class="text-slate-400 font-medium italic">Ready for Handshake</p>
+                            <p id="placeholderText" class="text-slate-400 font-medium italic">Handshake Required</p>
                         </div>
                     </div>
 
                     <div class="mt-4 flex flex-wrap gap-4 items-center justify-between">
                         <div class="flex gap-4">
                              <div class="bg-slate-900 px-3 py-1.5 rounded-lg text-[10px] border border-slate-700">
-                                <span class="text-slate-500 uppercase font-bold">Data:</span> <span id="dataStats" class="text-blue-400 font-mono">0.0 KB</span>
+                                <span class="text-slate-500 uppercase font-bold">Data Rate:</span> <span id="dataStats" class="text-blue-400 font-mono">0.0 KB</span>
                              </div>
                         </div>
                         <button id="initCameraBtn" class="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2.5 px-8 rounded-xl shadow-lg transition-all active:scale-95">
-                            Sync Camera (LibFreenect Logic)
+                            Sync Camera
                         </button>
                     </div>
                 </div>
@@ -118,6 +118,7 @@
                 } else {
                     cameraDevice = device;
                     await cameraDevice.open();
+                    // On Ubuntu, forcing configuration 1 is often required
                     await cameraDevice.selectConfiguration(1);
                     await cameraDevice.claimInterface(0);
                     log("Camera Online (Interface 0 claimed).", '#34d399');
@@ -126,59 +127,66 @@
             } catch (err) { log(err.message, '#f87171'); }
         }
 
+        async function writeReg(request, value, index = 0) {
+            log(`TX: Req=0x${request.toString(16)} Val=0x${value.toString(16)} Idx=0x${index.toString(16)}`);
+            try {
+                return await cameraDevice.controlTransferOut({
+                    requestType: 'vendor',
+                    recipient: 'device',
+                    request: request,
+                    value: value,
+                    index: index
+                });
+            } catch (e) {
+                log(`TX Error: ${e.message}`, '#f87171');
+                throw e;
+            }
+        }
+
         async function initStream() {
             if (!cameraDevice?.opened) return log("Connect Camera first!");
             
             try {
                 isStreaming = false;
-                log(`Executing LibFreenect sequence...`, '#fbbf24');
+                log(`Initializing Handshake...`, '#fbbf24');
                 
-                const write = async (req, val) => {
-                    log(`write_reg: 0x${req.toString(16).padStart(4, '0')} <= 0x${val.toString(16).padStart(2, '0')}`);
-                    return cameraDevice.controlTransferOut({
-                        requestType: 'vendor', recipient: 'device',
-                        request: req, value: val, index: 0
-                    });
-                };
+                // 1. Reset device
+                await writeReg(0x13, 0x00, 0x00);
+                await new Promise(r => setTimeout(r, 200));
 
-                // Exact sequence from freenect-glview log
-                await write(0x0105, 0x00);
-                await write(0x0006, 0x00);
-                await write(0x0012, 0x03);
-                await write(0x0013, 0x01);
-                await write(0x0014, 0x1e);
+                // 2. Set "Magic" Registration from libfreenect
+                await writeReg(0x06, 0x00, 0x00);
                 
-                // Mode setting (0x02 for video as per your log)
-                let modeVal = activeMode === 'video' ? 0x02 : 0x05;
-                await write(0x0006, modeVal);
-                
-                await write(0x0017, 0x00);
-                
-                // Resolution / FPS settings
-                await write(0x000c, 0x00);
-                await write(0x000d, 0x01);
-                await write(0x000e, 0x1e);
+                // Set the mode: Video is usually 0x01 or 0x02 depending on subtype
+                let modeVal = activeMode === 'video' ? 0x02 : 0x03;
+                await writeReg(0x06, modeVal, 0x00);
 
-                // Start Stream
-                await write(0x0005, 0x01);
+                // Start clock/timing
+                await writeReg(0x0c, 0x00, 0x00);
+                await writeReg(0x0d, 0x01, 0x00);
+                await writeReg(0x0e, 0x1e, 0x00); // 30fps
+
+                // Trigger start
+                await writeReg(0x05, 0x01, 0x00);
                 
-                log("SEQUENCE COMPLETE.", '#34d399');
+                log("HANDSHAKE OK. STARTING LOOP.", '#34d399');
                 
                 totalBytesReceived = 0;
                 isStreaming = true;
                 document.getElementById('placeholderOverlay').classList.add('hidden');
                 readLoop();
             } catch (e) {
-                log("SEQ FAIL: " + e.message, '#f87171');
+                log("CRITICAL FAIL: " + e.message, '#f87171');
             }
         }
 
         async function readLoop() {
-            const ep = 1; // Endpoint for video
-            log(`Reading from EP 0x${(0x80 + ep).toString(16)}...`);
+            const ep = activeMode === 'video' ? 1 : 2;
+            log(`Listening on ISO endpoint ${ep}...`);
             
             while (isStreaming && cameraDevice?.opened) {
                 try {
+                    // Packet size 1920 is what your log showed
                     const result = await cameraDevice.transferIn(ep, 65536);
                     if (result.status === 'ok' && result.data.byteLength > 0) {
                         totalBytesReceived += result.data.byteLength;
@@ -187,16 +195,23 @@
                     } else if (result.status === 'stall') {
                         await cameraDevice.clearHalt('in', ep);
                     }
-                } catch (e) { if (e.name === 'NetworkError') break; }
+                } catch (e) { 
+                    if (e.name === 'NetworkError') break; 
+                }
             }
         }
 
         function renderFrame(data) {
             const buf = new Uint8Array(data.buffer);
             const img = ctx.createImageData(640, 480);
+            
+            // Raw visual feedback: fill pixel data
             for (let i = 0; i < img.data.length; i += 4) {
                 const val = buf[i % buf.length] || 0;
-                img.data[i] = val; img.data[i+1] = val; img.data[i+2] = val; img.data[i+3] = 255;
+                img.data[i] = val; 
+                img.data[i+1] = val; 
+                img.data[i+2] = val; 
+                img.data[i+3] = 255;
             }
             ctx.putImageData(img, 0, 0);
         }
